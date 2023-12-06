@@ -17,12 +17,37 @@ class Model:
         learning_rate=0.001,
         epochs=20,
         batch_size=200,
+        eps=1e-5,
     ):
         """
         Initialize the model
+
+        Parameters
+        ---------
+        rng : numpy.random.Generator
+            a random number generator
+        training_data_X : (m,n) ndarray
+            the training data
+        training_data_y : (m,) ndarray
+            the target labels
+        val_data_X : (m',n) ndarray
+            the validation data
+        val_data_y : (m',) ndarray
+            the validation labels
+        objective_function : {'categoricalcrossentropy', 'RSS'}
+            the name of the objective function
+        learning_rate : float
+            learning rate of the model
+        epochs : int
+            number of epochs to run
+        batch_size : int
+            size to sample from training data
+        eps : float
+            a small number
         """
+        self.eps = eps
         self.layers = []
-        self.objective = ObjFunc(objective_function)
+        self.objective = ObjFunc(objective_function, self.eps)
         self.epochs = epochs
         self.learning_rate = learning_rate
         self.batch_size = batch_size
@@ -53,6 +78,7 @@ class Model:
                 func_name=func_name,
                 dropout=dropout,
                 rng=self.rng,
+                eps=self.eps,
             )
         )
 
@@ -66,15 +92,16 @@ class Model:
             input_size = self.input_size
         output_size = self.output_size
         if self.objective.name == "categoricalcrossentropy":
-            func = Activation("softmax")
+            func = Activation("softmax", self.eps)
         else:
-            func = Activation("relu")
+            func = Activation("relu", self.eps)
         self.layers.append(
             FinalLayer(
                 shape=(input_size, output_size),
                 func=func,
                 obj_func=self.objective,
                 rng=self.rng,
+                eps=self.eps,
             )
         )
 
@@ -170,7 +197,7 @@ class Layer:
     Layer class
     """
 
-    def __init__(self, shape, dropout, rng, func_name="relu"):
+    def __init__(self, shape, dropout, rng, eps, func_name="relu"):
         """
         Initialize the layer
         """
@@ -179,6 +206,7 @@ class Layer:
         self.weights = np.zeros(shape=self.shape)
         self.rng = rng
         self.dropout = dropout
+        self.eps = eps
         self.dropout_weights = None
         self.layer_val = None
         self.differential = None
@@ -204,14 +232,24 @@ class Layer:
     def update(self, x):
         """
         update the value of the layer for the input x
+        parameters
+        ----------
+        x : (m, n) ndarray
+        returns
+        -------
+        y : (m, k) ndarray
         """
         self.batch_size = len(x)
         self.reset_dropout_weights()
         self.input = x
         y = self.input @ self.weights
-        y = self.dropout_weights @ y
+        y = np.multiply(self.dropout_weights, y)
         self.layer_val = self.activation.evaluate(y)
-        # TODO set self.differential
+        self.differential = self.activation.differential(y).T
+        self.differential = np.multiply(
+            self.differential, self.dropout_weights.T
+        )
+        self.differential = np.multiply(self.differential, x)
 
     def evalute(self):
         """
@@ -227,7 +265,7 @@ class Layer:
         """
         new_delta = delta @ self.differential
         res = new_delta @ self.weights.T
-        self.weights += rate * (self.input.T @ new_delta)
+        self.weights += rate * new_delta
         return res
 
 
@@ -238,9 +276,9 @@ class FinalLayer(Layer):
     """
 
     def __init__(self, shape, func, rng, obj_func):
-        '''
+        """
         Initialize the final layer
-        '''
+        """
         super().__init__(shape=shape, func=func, dropout=0, rng=rng)
         self.obj_func = obj_func
         self.loss_val = 0.0
@@ -266,7 +304,9 @@ class FinalLayer(Layer):
         self.input = x
         res = self.input @ self.weights
         self.layer_val = self.activation.evaluate(res)
-        self.differential = self.obj_func.differential(res, y_hat)
+        self.differential = (
+            self.obj_func.differential(res, y_hat).T @ self.input
+        )
         self.loss_val = self.obj_func.evaluate(res, y_hat)
         self.num_acc_pred = 1.0 * np.sum(
             np.argmax(self.layer_val, axis=-1) == np.argmax(y_hat, axis=-1)
@@ -277,7 +317,7 @@ class FinalLayer(Layer):
         update the weights of the model based on the learning rate
         """
         res = self.differential @ self.weights.T
-        self.weights += rate * self.input.T @ self.differential
+        self.weights += rate * self.differential
         return res
 
 
@@ -360,6 +400,9 @@ class Activation:
         return np.maximum(y, 0)
 
     def _softmax(self, y):
+        """
+        Softmax of a vector
+        """
         y = y - np.max(y, axis=-1)[:, None]
         res = np.exp(y)
         return np.multiply(np.reciprocal(np.sum(res, axis=-1))[:, None], res)
