@@ -206,13 +206,14 @@ class Model:
             )
         )
 
-    def run(self, weights):
+    def run(self, weights=None):
         """
         Run the model.
 
         Parameters
         ----------
-        None
+        weights : array
+            either None or initial weights for each layer of the model
         """
         self.init_weights(weights=weights)
         self.training_loss = []
