@@ -206,7 +206,7 @@ class Model:
             )
         )
 
-    def run(self, weights=None):
+    def run(self, all_weights=None):
         """
         Run the model.
 
@@ -215,7 +215,7 @@ class Model:
         weights : array
             either None or initial weights for each layer of the model
         """
-        self.init_weights(weights=weights)
+        self.init_weights(all_weights=all_weights)
         self.training_loss = []
         self.training_acc = []
         self.val_loss = []
