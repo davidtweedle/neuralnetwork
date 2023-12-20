@@ -67,6 +67,15 @@ class Model:
     def add_layer(self, output_size, func_name, dropout):
         """
         Add a layer to the network
+
+        Parameters
+        ----------
+        output_size : int
+            the dimension of the output from the layer
+        func_name : {"relu", "softmax"}
+            the name of the activation function
+        dropout : float
+            the probability to drop any particular output neuron
         """
         if len(self.layers) > 0:
             input_size = self.layers[-1].shape[-1]
@@ -84,7 +93,12 @@ class Model:
 
     def add_final_layer(self):
         """
-        Add a layer (with objective function)
+        Add a the final layer
+        with objective function self.objective
+
+        Parameters
+        ----------
+        None
         """
         if len(self.layers) > 0:
             input_size = self.layers[-1].shape[-1]
@@ -106,42 +120,81 @@ class Model:
             )
         )
 
-    def init_weights(self):
+    def init_weights(self, all_weights=None):
         """
         Initialize the weights of each layer
-        TODO: add options to init weights to particular options
+
+        Parameters
+        ----------
+        weights : array of length len(self.layers) or None
+            if not none, contains weights to initialize each layer
+
         """
-        for layer in self.layers:
-            layer.init_weights()
+        if all_weights is None:
+            all_weights = len(self.layers) * [None]
+        for i, layer in enumerate(self.layers):
+            layer.init_weights(weights=all_weights[i])
 
     def propogate_all_layers(self):
         """
         Calculate the gradients of all layers
         Then use back propogation to calculate
         the next gradient
+        Calculation of the gradient is done from the
+        final layer and each differential is passed back
+        to the previous layer
+
+        Parameters
+        ----------
+        None
         """
         final_layer = self.layers[-1]
         delta = final_layer.propogate(rate=self.learning_rate)
-        for i in range(len(self.layers) - 2, -1, -1):
-            layer = self.layers[i]
+        for layer in reversed(self.layers[:-1]):
             delta = layer.propogate(rate=self.learning_rate, delta=delta)
 
-    def update_all_layers(self, input, batch_labels):
+    def update_all_layers(self, input, batch_labels, validation=False):
         """
         calculate the objective function value for input
+        This is a forward pass through all the layers
+        starting with the input value and ending
+        with an evaluation of the objective function.
         TODO: disable dropout for validation
         TODO: when dropout is active scale output layer down
+
+        Parameters
+        ----------
+        input : (m,n) ndarray
+            m rows of n independent variables
+        batch_labels : (m, n') ndarray
+            m rows of n' dependent variables
+        validation : boolean
+            If True, then calculate then predict the batch_labels 
+            from the given input. In particular, do not dropout
+            any ``neurons''.
         """
         final_layer = self.layers[-1]
-        for i in range(len(self.layers) - 1):
-            layer = self.layers[i]
-            layer.update(input)
+        for layer in self.layers[:-1]:
+            layer.update(input, validation=validation)
             input = layer.evaluate()
-        final_layer.update(input, batch_labels)
+        final_layer.update(input, batch_labels, validation=validation)
 
     def print_results(self, epoch, train_loss, train_acc, val_loss, val_acc):
         """
         Print the results of the current epoch
+
+        Parameters
+        ----------
+        epoch : int
+            the current epoch number
+        train_loss : float
+            the training loss of the current epoch
+        train_acc : float
+            the training accuracy of the current epoch
+        val_loss : float
+            the validation loss of the current epoch
+        val_acc : float
+            the validation accuracy of the current epoch
         """
         print(
             (
@@ -153,11 +206,15 @@ class Model:
             )
         )
 
-    def run(self):
+    def run(self, weights):
         """
-        Run the model
+        Run the model.
+
+        Parameters
+        ----------
+        None
         """
-        self.init_weights()
+        self.init_weights(weights=weights)
         self.training_loss = []
         self.training_acc = []
         self.val_loss = []
@@ -203,6 +260,20 @@ class Layer:
     def __init__(self, shape, dropout, rng, eps, func_name="relu"):
         """
         Initialize the layer
+
+        Parameters
+        ----------
+        shape : (int, int)
+            shape[0] is the input size, and shape[1] is the output size 
+        dropout : float
+            0 <= dropout <= 1 is the chance that any particular output node
+            is set to zero on a given iteration
+        rng : numpy.random.Generator
+            a given random number generator
+        eps : float
+            a small tolerance
+        func_name : {"relu", "softmax"}
+            the name of the activation function for this layer
         """
         self.shape = shape
         self.eps = eps
@@ -215,22 +286,27 @@ class Layer:
         self.differential = None
         self.batch_size = None
 
-    def init_weights(self):
+    def init_weights(self, weights=None):
         """
         Initialize the weights
-        """
-        self.weights = 0.2 * self.rng.random(self.shape) - 0.1
 
-    def set_weights(self, weights):
+        Parameters
+        ----------
+        weights : (n,k) ndarray or None
+           if None, then set the weights to a random initial value
+           if not None then set the weights as requested
         """
-        TODO: Set your own custom weights
-        """
+        if weights is None:
+            weights = 0.2 * self.rng.random(self.shape) - 0.1
         self.weights = weights
 
     def reset_dropout_weights(self):
         """
         Reset the dropout weights
-        TODO: add option to set dropout to zero
+
+        Parameters
+        ----------
+        None
         """
         self.dropout_weights = self.rng.choice(
             a=[0, 1],
@@ -238,31 +314,51 @@ class Layer:
             p=[1 - self.dropout, self.dropout],
         )
 
-    def update(self, x):
+    def update(self, x, validation):
         """
         update the value of the layer for the input x
-        parameters
+        y = R(D(xw)) is computed and stored
+        in self.layer_val
+        where R is the activation function
+        D is the dropout layer
+        w are the weights
+
+        Parameters
         ----------
         x : (m, n) ndarray
-        returns
-        -------
-        y : (m, k) ndarray
+           m input vectors of n independent variables
+        validation : boolean
+            if true then do not update the gradient and do not use dropout
         """
         self.batch_size = len(x)
-        self.reset_dropout_weights()
         self.input = x
         y = self.input @ self.weights
-        y = np.multiply(self.dropout_weights, y)
+        if not validation:  # apply dropout
+            self.reset_dropout_weights()
+            y /= (1.0 - self.dropout)
+            y = np.multiply(self.dropout_weights, y)
         self.layer_val = self.activation.evaluate(y)
-        self.differential = self.activation.differential(y)
-        self.differential = np.multiply(
-            self.differential, self.dropout_weights
-        )
-        self.differential = self.differential.T
+        if not validation:  # compute gradients
+            self.differential = self.activation.differential(y)
+            self.differential = np.multiply(
+                self.differential, self.dropout_weights
+            )
+            self.differential = self.differential.T
 
     def evaluate(self):
         """
-        Return the most recent value of the layer
+        Return the most recent value of the call to
+        this layers update funciton
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        y : (m,k) ndarray
+            the result of the most recent call to
+            this layers update function
         """
         return self.layer_val
 
@@ -270,11 +366,28 @@ class Layer:
         """
         Update the weights based on the learning rate
         and the delta from the higher layers
-        Return the resulting new delta for the next layer
+        Return the resulting delta to pass onto the
+        next layer.
+
+        Parameters
+        ----------
+        rate : float
+            learning rate given from the model
+        delta : float
+            gradient passed from the higher layers
+
+        Returns
+        -------
+        delta' : float
+            gradient of this layer
+
         """
         new_delta = np.multiply(delta, self.differential.T)
-        self.weights -= rate * np.dot(self.input.T, new_delta)
-        return new_delta @ self.weights.T
+        res = new_delta @ self.weights.T
+        self.weights -= (
+                (rate / self.batch_size) * np.dot(self.input.T, new_delta)
+                )
+        return res
 
 
 class FinalLayer(Layer):
@@ -286,6 +399,23 @@ class FinalLayer(Layer):
     def __init__(self, shape, func_name, rng, obj_func, eps):
         """
         Initialize the final layer
+
+        Parameters
+        ----------
+        shape : (int, int)
+            shape[0] is the number of independent variables 
+            input into the layer.
+            shape[1] is the number of dependent variables output by the
+            layer.
+        func_name : {"softmax", "relu"}
+            the name of the activation function
+        rng : numpy.random.Generator
+            a random number generator
+        obj_func : ObjFunc
+            an objective function
+            must be either "RSS" or "categoricalcrossentropy"
+        eps : float
+            a small tolerance
         """
         super().__init__(
             shape=shape, func_name=func_name, eps=eps, dropout=0, rng=rng
@@ -298,26 +428,53 @@ class FinalLayer(Layer):
     def get_loss(self):
         """
         return the most recent loss value
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        f(y) : float
+            the most recent loss value for the current batch
         """
         return self.loss_val
 
     def get_num_acc_pred(self):
         """
         return the most recent number of accurate predictions
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        self.num_acc_pred : float
+            the number of accurate predictions for the current batch
         """
         return self.num_acc_pred
 
-    def update(self, x, y_hat):
+    def update(self, x, y_hat, validation=False):
         """
         Update the loss value with input x and labels y_hat
-        TODO: adjust learning rate based on drop out rate and
-              batch size
-        TODO: on validation/test don't use dropout
+
+        Parameters
+        ----------
+        x : (m,n) ndarray
+            m rows of n independent variables
+        y_hat : (m,k) ndarray
+            m rows of k target variables
+        validation : boolean
+            if True then do not update the gradient
+            if False, then update the gradient as usual
         """
         self.input = x
+        self.batch_size = len(x)
         res = self.input @ self.weights
         self.layer_val = self.activation.evaluate(res)
-        self.differential = self.obj_func.differential(res, y_hat)
+        if not validation:
+            self.differential = self.obj_func.differential(res, y_hat)
         self.loss_val = self.obj_func.evaluate(res, y_hat)
         self.num_acc_pred = 1.0 * np.sum(
             np.argmax(self.layer_val, axis=-1) == np.argmax(y_hat, axis=-1)
@@ -326,24 +483,41 @@ class FinalLayer(Layer):
     def propogate(self, rate):
         """
         update the weights of the model based on the learning rate
+
+        Parameters
+        ----------
+        rate : float
+            the learning rate to use
+
+        Returns
+        -------
+        delta : (m,k) ndarray
+            the gradient of the current layer
         """
+        res = self.differential @ self.weights.T
         self.weights -= (
-            rate
+            (rate / self.batch_size)
             * np.dot(self.input.T, self.differential)
         )
-        return self.differential @ self.weights.T
+        return res
 
 
 class ObjFunc:
     """
-    Objective functions
+    Objective function
+    TODO: make this into subclasses
     """
 
     def __init__(self, eps, name="categoricalcrossentropy"):
         """
         Initialize the objective function with name
-        Values for name: 'categoricalcrossentropy'
-                         'RSS'
+
+        Parameters
+        ----------
+        eps : float
+            a small tolerance
+        name : {"categoricalcrossentropy", "RSS"}
+            the name of the objective function
         """
         self.name = name
         self.eps = eps
@@ -351,8 +525,19 @@ class ObjFunc:
     def evaluate(self, y, y_hat):
         """
         Evaluate the objective function
-        where y is the model result
-        and y_hat is the target
+
+        Parameters
+        ----------
+        y : (m,k) ndarray
+            the result of evaluating the model at the given input
+            of the current batch
+        y_hat : (m,k) ndarray
+            the target values of the current batch
+
+        Returns
+        -------
+        f(y) : float
+            the value of the objective function at y
         """
         if self.name == "categoricalcrossentropy":
             return self._crossentropy(y, y_hat)
@@ -363,17 +548,61 @@ class ObjFunc:
         """
         calculate the differential at the result y
         and target y_hat
+
+        Parameters
+        ----------
+        y : (m, k) ndarray
+            the result of evaluating the model at the given input
+            of the current batch
+        y_hat : (m, k) ndarray
+            the target values of the current batch
+
+        Returns
+        -------
+        delta : (m,k) ndarray
+            the gradient of the composition of the objective function and
+            the activation function. We assume that if RSS is the objective
+            function then the activation is relu and if categoricalcrossentropy
+            is the objective function then the activation is softmax
         """
         return y - y_hat
 
     def _RSS(self, y, y_hat):
         """
         calculate the residual sum of squares of y - y_hat
+
+        Parameters
+        ----------
+        y : (m, k) ndarray
+            the result of evaluating the model at the given input
+            of the current batch
+        y_hat : (m, k) ndarray
+            the target values of the current batch
+
+        Returns
+        -------
+        sum (y - y_hat) ** 2 : float
         """
         res = (y - y_hat) ** 2
         return np.sum(res)
 
     def _crossentropy(self, y, y_hat):
+        """
+        Calculates the categorical crossentropy between y and y_hat
+
+        Parameters
+        ----------
+        y : (m, k) ndarray
+            the result of evaluating the model at the given input
+            of the current batch
+        y_hat : (m, k) ndarray
+            the target values of the current batch
+
+        Returns
+        -------
+        -log(y_i) such that y_hat_i == 1
+
+        """
         return np.sum(np.dot(y_hat.T, -np.log(y, where=y > self.eps)))
 
 
@@ -386,12 +615,30 @@ class Activation:
     def __init__(self, eps, name="relu"):
         """
         Initialize the activation function with name
+
+        Parameters
+        ----------
+        eps : float
+            a small tolerance
+        name : {"relu", "softmax"}
+            the name of the activation function to use
         """
         self.name = name
+        self.eps = eps
 
     def evaluate(self, x):
         """
         evaluate the activation function at x
+
+        Parameters
+        ----------
+        x : (m, k) ndarray
+            input to the activation function
+
+        Returns
+        -------
+        f(x) : float
+            the value of the activation function
         """
         if self.name == "relu":
             return self._relu(x)
@@ -401,6 +648,16 @@ class Activation:
     def differential(self, y):
         """
         calculate the differential
+
+        Parameters
+        ----------
+        y : (m,k) ndarray
+            input to the activation function
+
+        Returns
+        -------
+        df / dy : (m,k) ndarray
+            gradient at y
         """
         if self.name == "relu":
             return self._d_relu(y)
@@ -410,12 +667,30 @@ class Activation:
     def _relu(self, y):
         """
         Rectified linear unit
+
+        Parameters
+        ----------
+        y : (m,k) ndarray
+
+        Returns
+        -------
+        max(y,0) : (m,k) ndarray
+            the Rectified Linear Unit activation at y
         """
         return np.maximum(y, 0)
 
     def _softmax(self, y):
         """
         Softmax of a vector
+
+        Parameters
+        ----------
+        y : (m,k) ndarray
+        
+        Returns
+        -------
+        exp(y)/ sum(exp(y_i)) : (m,k) ndarray
+            softmax of y
         """
         y = y - np.max(y, axis=-1)[:, None]
         res = np.exp(y)
@@ -424,8 +699,29 @@ class Activation:
     def _d_softmax(self, y):
         """
         the derivative of softmax
+
+        Parameters
+        ----------
+        y : (m,k) ndarray
+
+        Returns
+        -------
+        d softmax / dy : (m,k) ndarray
+            derivative of softmax
         """
         return np.dot(y, y - np.ones(shape=y.shape))
 
     def _d_relu(self, y):
+        """
+        the derivative of relu
+
+        Parameters
+        ----------
+        y : (m,k) ndarray
+
+        Returns
+        -------
+        d ReLU / dy : (m,k) ndarray
+            derivative of relu at y
+        """
         return np.greater_equal(y, 0).astype(np.float64)

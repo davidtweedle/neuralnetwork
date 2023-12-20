@@ -4,3 +4,4 @@ __pycache__/
 tags
 tags.lock
 .venv/
+*.egg-info/
