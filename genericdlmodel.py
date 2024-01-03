@@ -159,8 +159,6 @@ class Model:
         This is a forward pass through all the layers
         starting with the input value and ending
         with an evaluation of the objective function.
-        TODO: disable dropout for validation
-        TODO: when dropout is active scale output layer down
 
         Parameters
         ----------
@@ -280,6 +278,7 @@ class Layer:
         self.eps = eps
         self.activation = Activation(eps=self.eps, name=func_name)
         self.weights = np.zeros(shape=self.shape)
+        self.bias = np.zeros(shape=self.shape)
         self.rng = rng
         self.dropout = dropout
         self.dropout_weights = None
@@ -287,7 +286,7 @@ class Layer:
         self.differential = None
         self.batch_size = None
 
-    def init_weights(self, weights=None):
+    def init_weights(self, weights=None, bias=None):
         """
         Initialize the weights
 
@@ -296,10 +295,14 @@ class Layer:
         weights : (n,k) ndarray or None
            if None, then set the weights to a random initial value
            if not None then set the weights as requested
+        bias : (k,) ndarray or None
         """
         if weights is None:
             weights = 0.2 * self.rng.random(self.shape) - 0.1
+        if bias is None:
+            bias = 0.2 * self.rng.random(self.shape[-1])
         self.weights = weights
+        self.bias = bias
 
     def reset_dropout_weights(self):
         """
@@ -333,7 +336,7 @@ class Layer:
         """
         self.batch_size = len(x)
         self.input = x
-        y = self.input @ self.weights
+        y = self.input @ self.weights + self.bias
         if not validation:  # apply dropout
             self.reset_dropout_weights()
             y /= (1.0 - self.dropout)
@@ -388,6 +391,7 @@ class Layer:
         self.weights -= (
                 (rate / self.batch_size) * np.dot(self.input.T, new_delta)
                 )
+        self.bias -= (rate / self.batch_size) * new_delta
         return res
 
 
