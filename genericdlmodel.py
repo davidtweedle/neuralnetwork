@@ -610,6 +610,68 @@ class ObjFunc:
         """
         return np.sum(np.dot(y_hat.T, -np.log(y, where=y > self.eps)))
 
+class LayerWithRankOneUpdates(Layer):
+    """
+    A subclass of the Layer class which removes dropout
+    and includes rank one weight updates
+    """
+
+    def __init__(self, shape, rng, eps, func_name="relu", num_iter=20):
+        """
+        Initialize the layer
+
+        Parameters
+        ----------
+        shape : (int, int)
+            shape[0] is the input size, and shape[1] is the output size
+        rng : numpy.random.Generator
+            a given random number generator
+        eps : float
+            a small tolerance
+        func_name : {"relu", "softmax"}
+            the name of the activation function for this layer
+        num_iter : int
+            number of times to iterate when calculating rank one updates of gradients
+        """
+        super().__init__(self,
+                         shape=shape,
+                         rng=rng,
+                         eps=eps,
+                         dropout=0,
+                         func_name=func_name
+                         )
+        self.num_iter = num_iter
+
+    def _rank_one_update(self, num_iter, mat):
+        """
+        Calculate a rank one approximation to as follows
+        v, w <-- Aw/||Aw||, A^Tv / ||A^Tv|| and repeat >=num_iter times
+
+        Params
+        ------
+        num_iter : int
+            number of times to repeat the operation
+        mat : (n,k) ndarray
+            matrix to approximate by rank one matrix
+
+        Returns
+        -------
+        sigma * v w^T : (n,k) ndarray
+            a rank one approximation to mat
+        """
+        v = self.rng.random(mat.shape[0],1)
+        w = mat.T @ v
+        for _ in range(num_iter):
+            v, w = A @ w, A.T @ v
+            v /= np.linalg.norm(v)
+            w /= np.linalg.norm(w)
+        sigma = np.linalg.norm(v)
+        return sigma * v * w.T
+
+
+
+
+
 
 class Activation:
     """
