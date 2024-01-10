@@ -405,7 +405,7 @@ class Layer:
         """
         new_delta = np.multiply(delta, self.differential.T)
         res = new_delta @ self.weights.T
-        new_delta = self.updater(new_delta)
+        new_delta = self.updater.update(new_delta)
         self.weights -= (
             (rate / self.batch_size) * np.dot(self.input.T, new_delta)
         )
