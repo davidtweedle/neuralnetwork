@@ -409,7 +409,7 @@ class Layer:
         self.weights -= (
             (rate / self.batch_size) * np.dot(self.input.T, new_delta)
         )
-        self.bias -= (rate / self.batch_size) * new_delta
+        self.bias -= rate * np.mean(new_delta, axis=0)
         return res
 
 
@@ -524,7 +524,7 @@ class FinalLayer(Layer):
             (rate / self.batch_size)
             * np.dot(self.input.T, self.differential)
         )
-        self.bias -= (rate / self.batch_size) * self.differential
+        self.bias -= rate * np.mean(self.differential, axis=0)
         return res
 
 
