@@ -441,7 +441,9 @@ class FinalLayer(Layer):
             a small tolerance
         """
         super().__init__(
-            shape=shape, func_name=func_name, eps=eps, dropout=0, rng=rng
+            shape=shape, func_name=func_name, eps=eps, dropout=0, rng=rng,
+            update_rule='identity',
+            update_args={}
         )
         self.obj_func = obj_func
         self.loss_val = 0.0
