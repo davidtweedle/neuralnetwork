@@ -64,7 +64,7 @@ class Model:
         if self.num_training_samples % self.batch_size != 0:
             self.num_batches += 1
 
-    def add_layer(self, output_size, func_name, dropout):
+    def add_layer(self, output_size, func_name, dropout, update_rule, update_args):
         """
         Add a layer to the network
 
@@ -76,6 +76,10 @@ class Model:
             the name of the activation function
         dropout : float
             the probability to drop any particular output neuron
+        update_rule : {'identity', 'rank one update', 'SVD'}
+            update rule to use for updating weights
+        update_args : dict
+            arguments to pass to updater
         """
         if len(self.layers) > 0:
             input_size = self.layers[-1].shape[-1]
@@ -88,6 +92,8 @@ class Model:
                 dropout=dropout,
                 rng=self.rng,
                 eps=self.eps,
+                update_rule=update_rule,
+                update_args=update_args
             )
         )
 
@@ -116,7 +122,7 @@ class Model:
                 func_name=func_name,
                 obj_func=self.objective,
                 rng=self.rng,
-                eps=self.eps,
+                eps=self.eps
             )
         )
 
@@ -167,7 +173,7 @@ class Model:
         batch_labels : (m, n') ndarray
             m rows of n' dependent variables
         validation : boolean
-            If True, then calculate then predict the batch_labels 
+            If True, then calculate then predict the batch_labels
             from the given input. In particular, do not dropout
             any ``neurons''.
         """
@@ -256,14 +262,22 @@ class Layer:
     Layer class
     """
 
-    def __init__(self, shape, dropout, rng, eps, func_name="relu"):
+    def __init__(self,
+                 shape,
+                 dropout,
+                 rng,
+                 eps,
+                 func_name="relu",
+                 update_rule="identity",
+                 update_args=None
+                 ):
         """
         Initialize the layer
 
         Parameters
         ----------
         shape : (int, int)
-            shape[0] is the input size, and shape[1] is the output size 
+            shape[0] is the input size, and shape[1] is the output size
         dropout : float
             0 <= dropout <= 1 is the chance that any particular output node
             is set to zero on a given iteration
@@ -285,6 +299,9 @@ class Layer:
         self.layer_val = None
         self.differential = None
         self.batch_size = None
+        self.updater = Updater(rule=update_rule,
+                               **update_args
+                               )
 
     def init_weights(self, weights=None, bias=None):
         """
@@ -388,9 +405,10 @@ class Layer:
         """
         new_delta = np.multiply(delta, self.differential.T)
         res = new_delta @ self.weights.T
+        new_delta = self.updater(new_delta)
         self.weights -= (
-                (rate / self.batch_size) * np.dot(self.input.T, new_delta)
-                )
+            (rate / self.batch_size) * np.dot(self.input.T, new_delta)
+        )
         self.bias -= (rate / self.batch_size) * new_delta
         return res
 
@@ -408,7 +426,7 @@ class FinalLayer(Layer):
         Parameters
         ----------
         shape : (int, int)
-            shape[0] is the number of independent variables 
+            shape[0] is the number of independent variables
             input into the layer.
             shape[1] is the number of dependent variables output by the
             layer.
@@ -476,7 +494,7 @@ class FinalLayer(Layer):
         """
         self.input = x
         self.batch_size = len(x)
-        res = self.input @ self.weights
+        res = self.input @ self.weights + self.bias
         self.layer_val = self.activation.evaluate(res)
         if not validation:
             self.differential = self.obj_func.differential(res, y_hat)
@@ -504,6 +522,7 @@ class FinalLayer(Layer):
             (rate / self.batch_size)
             * np.dot(self.input.T, self.differential)
         )
+        self.bias -= (rate / self.batch_size) * self.differential
         return res
 
 
@@ -610,39 +629,69 @@ class ObjFunc:
         """
         return np.sum(np.dot(y_hat.T, -np.log(y, where=y > self.eps)))
 
-class LayerWithRankOneUpdates(Layer):
+
+class Updater():
     """
-    A subclass of the Layer class which removes dropout
-    and includes rank one weight updates
+    Updating rule for weight updates in a layer
     """
 
-    def __init__(self, shape, rng, eps, func_name="relu", num_iter=20):
-        """
-        Initialize the layer
+    def __init__(self, rule='identity', **kwargs):
+        '''
+        Construct an updater function
 
-        Parameters
-        ----------
-        shape : (int, int)
-            shape[0] is the input size, and shape[1] is the output size
-        rng : numpy.random.Generator
-            a given random number generator
-        eps : float
-            a small tolerance
-        func_name : {"relu", "softmax"}
-            the name of the activation function for this layer
-        num_iter : int
-            number of times to iterate when calculating rank one updates of gradients
-        """
-        super().__init__(self,
-                         shape=shape,
-                         rng=rng,
-                         eps=eps,
-                         dropout=0,
-                         func_name=func_name
-                         )
-        self.num_iter = num_iter
+        Params
+        ------
+        rule : {'identity', 'rank one update', 'SVD'}
+            rule to update the weights
+        kwargs : dict
+            keyword arguments to pass to the updater
+        '''
+        self.rule = rule
+        self.kwargs = kwargs
 
-    def _rank_one_update(self, num_iter, mat):
+    def update(self, mat):
+        '''
+        Update mat based on the given rule
+
+        Params
+        ------
+        mat : (n,k) ndarray
+
+        Returns
+        -------
+        mat' : (n,k) ndarray
+            updater applied to mat
+        '''
+        updater = self._get_updater()
+        return updater(mat, **self.kwargs)
+
+    def _get_updater(self):
+        '''
+        Returns an updater function according to the
+        assigned rule
+        '''
+        if self.rule == 'identity':
+            return self._identity
+        elif self.rule == 'rank one update':
+            return self._rank_one_update
+        elif self.rule == 'SVD':
+            return self._SVD
+
+    def _identity(self, mat):
+        '''
+        Returns the same matrix as given
+
+        Params
+        ------
+        mat : (n,k) ndarray
+
+        Returns
+        -------
+        mat : (n,k) ndarray
+        '''
+        return mat
+
+    def _rank_one_update(self, mat, num_iter=20):
         """
         Calculate a rank one approximation to as follows
         v, w <-- Aw/||Aw||, A^Tv / ||A^Tv|| and repeat >=num_iter times
@@ -659,24 +708,42 @@ class LayerWithRankOneUpdates(Layer):
         sigma * v w^T : (n,k) ndarray
             a rank one approximation to mat
         """
-        v = self.rng.random(mat.shape[0],1)
+        v = self.rng.random(mat.shape[0], 1)
         w = mat.T @ v
         for _ in range(num_iter):
-            v, w = A @ w, A.T @ v
+            v, w = mat @ w, mat.T @ v
             v /= np.linalg.norm(v)
             w /= np.linalg.norm(w)
         sigma = np.linalg.norm(v)
         return sigma * v * w.T
 
+    def _SVD(self, mat, rank=3):
+        '''
+        Update mat with a low rank approximation
+        using the singular value decomposition
 
+        Params
+        ------
+        mat : (n,k) ndarray
+            matrix to update
+        rank : int
+            rank of low rank approximation to use
 
-
+        Returns
+        -------
+        mat' : (n,k) ndarray
+            matrix of rank rank closest to mat
+        '''
+        u, s, vh = np.linalg.svd(mat)
+        u = u[:, :rank]
+        s = s[:rank]
+        vh = vh[:rank]
+        return (u * s) @ vh
 
 
 class Activation:
     """
     Activation function
-    TODO: add subclasses for relu and softmax
     """
 
     def __init__(self, eps, name="relu"):
@@ -753,7 +820,7 @@ class Activation:
         Parameters
         ----------
         y : (m,k) ndarray
-        
+
         Returns
         -------
         exp(y)/ sum(exp(y_i)) : (m,k) ndarray
