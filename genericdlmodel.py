@@ -269,7 +269,7 @@ class Layer:
                  eps,
                  func_name="relu",
                  update_rule="identity",
-                 update_args=None
+                 update_args={}
                  ):
         """
         Initialize the layer
@@ -405,9 +405,8 @@ class Layer:
         """
         new_delta = np.multiply(delta, self.differential.T)
         res = new_delta @ self.weights.T
-        new_delta = self.updater.update(new_delta)
         self.weights -= (
-            (rate / self.batch_size) * np.dot(self.input.T, new_delta)
+            (rate / self.batch_size) * self.updater.update(np.dot(self.input.T, new_delta))
         )
         self.bias -= rate * np.mean(new_delta, axis=0)
         return res
@@ -419,7 +418,7 @@ class FinalLayer(Layer):
     Includes an objective function
     """
 
-    def __init__(self, shape, func_name, rng, obj_func, eps):
+    def __init__(self, shape, func_name, rng, obj_func, eps, update_rule='identity', update_args={}):
         """
         Initialize the final layer
 
@@ -442,8 +441,8 @@ class FinalLayer(Layer):
         """
         super().__init__(
             shape=shape, func_name=func_name, eps=eps, dropout=0, rng=rng,
-            update_rule='identity',
-            update_args={}
+            update_rule=update_rule,
+            update_args=update_args
         )
         self.obj_func = obj_func
         self.loss_val = 0.0
@@ -522,7 +521,7 @@ class FinalLayer(Layer):
         res = self.differential @ self.weights.T
         self.weights -= (
             (rate / self.batch_size)
-            * np.dot(self.input.T, self.differential)
+            * self.updater.update(np.dot(self.input.T, self.differential))
         )
         self.bias -= rate * np.mean(self.differential, axis=0)
         return res
@@ -736,7 +735,6 @@ class Updater():
         mat' : (n,k) ndarray
             matrix of rank rank closest to mat
         '''
-        print(mat, rank)
         u, s, vh = np.linalg.svd(mat)
         return (u[:, :rank] * s[:rank]) @ vh[:rank]
 
