@@ -182,10 +182,11 @@ class Model:
             any ``neurons''.
         """
         final_layer = self.layers[-1]
+        x = input
         for layer in self.layers[:-1]:
-            layer.update(input, validation=validation)
-            input = layer.evaluate()
-        final_layer.update(input, batch_labels, validation=validation)
+            layer.update(x, validation=validation)
+            x = layer.evaluate()
+        final_layer.update(x, batch_labels, validation=validation)
 
     def print_results(self, epoch, train_loss, train_acc, val_loss, val_acc):
         """
@@ -245,7 +246,7 @@ class Model:
             self.training_acc.append(num_acc_pred / self.num_training_samples)
             input = self.val_data_X
             batch_labels = self.val_data_y
-            self.update_all_layers(input, batch_labels)
+            self.update_all_layers(input, batch_labels)s
             self.val_loss.append(
                 self.layers[-1].get_loss() / self.num_val_samples
             )
@@ -339,7 +340,7 @@ class Layer:
             p=[1 - self.dropout, self.dropout],
         )
 
-    def update(self, x, validation):
+    def update(self, x, validation=False):
         """
         update the value of the layer for the input x
         y = R(D(xw)) is computed and stored
@@ -411,7 +412,7 @@ class Layer:
         res = new_delta @ self.weights.T
         print(np.linalg.matrix_rank(np.dot(self.input.T, new_delta)))
         self.weights -= (
-            (rate / self.batch_size) * self.updater.update(np.dot(self.input.T, new_delta))
+            (rate / self.batch_size) *self.updater.update(np.dot(self.input.T, new_delta))
         )
         self.bias -= rate * np.mean(new_delta, axis=0)
         return res
@@ -504,6 +505,7 @@ class FinalLayer(Layer):
         self.layer_val = self.activation.evaluate(res)
         if not validation:
             self.differential = self.obj_func.differential(res, y_hat)
+            print('updated differential')
         self.loss_val = self.obj_func.evaluate(res, y_hat)
         self.num_acc_pred = 1.0 * np.sum(
             np.argmax(self.layer_val, axis=-1) == np.argmax(y_hat, axis=-1)
