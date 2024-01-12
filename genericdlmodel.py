@@ -236,6 +236,7 @@ class Model:
                 end = min((i + 1) * self.batch_size, self.num_training_samples)
                 batch_labels = self.training_data_y[start:end]
                 input = self.training_data_X[start:end]
+                print(input.shape)
                 self.update_all_layers(input, batch_labels)
                 train_loss += self.layers[-1].get_loss()
                 num_acc_pred += self.layers[-1].get_num_acc_pred()
