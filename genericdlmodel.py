@@ -356,7 +356,6 @@ class Layer:
             if true then do not update the gradient and do not use dropout
         """
         self.batch_size = len(x)
-        print(len(x), x.shape)
         self.input = x
         y = self.input @ self.weights + self.bias
         if not validation:  # apply dropout
@@ -410,6 +409,7 @@ class Layer:
         """
         new_delta = np.multiply(delta, self.differential.T)
         res = new_delta @ self.weights.T
+        print(np.linalg.matrix_rank(np.dot(self.input.T, new_delta)))
         self.weights -= (
             (rate / self.batch_size) * self.updater.update(np.dot(self.input.T, new_delta))
         )
@@ -524,6 +524,7 @@ class FinalLayer(Layer):
             the gradient of the current layer
         """
         res = self.differential @ self.weights.T
+        print(np.linalg.matrix_rank(np.dot(self.input.T, self.differential)))
         self.weights -= (
             (rate / self.batch_size)
             * self.updater.update(np.dot(self.input.T, self.differential))
