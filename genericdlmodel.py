@@ -97,14 +97,16 @@ class Model:
             )
         )
 
-    def add_final_layer(self):
+    def add_final_layer(self, update_rule='identity', update_args={}):
         """
         Add a the final layer
         with objective function self.objective
 
         Parameters
         ----------
-        None
+        update_rule : {'identity', 'rank one update', 'SVD'}
+        update_args : dict
+            arguments to pass to Updater constructor
         """
         if len(self.layers) > 0:
             input_size = self.layers[-1].shape[-1]
@@ -122,7 +124,9 @@ class Model:
                 func_name=func_name,
                 obj_func=self.objective,
                 rng=self.rng,
-                eps=self.eps
+                eps=self.eps,
+                update_rule=update_rule,
+                update_args=update_args
             )
         )
 
@@ -664,7 +668,6 @@ class Updater():
             updater applied to mat
         '''
         updater = self._get_updater()
-        print(mat, np.linalg.matrix_rank(mat))
         return updater(mat, **self.kwargs)
 
     def _get_updater(self):
