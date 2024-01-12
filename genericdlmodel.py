@@ -736,13 +736,9 @@ class Updater():
         mat' : (n,k) ndarray
             matrix of rank rank closest to mat
         '''
+        print(mat, rank)
         u, s, vh = np.linalg.svd(mat)
-        u = u[:, :rank]
-        s = s[:rank]
-        vh = vh[:rank]
-        print("updating")
-        print(s)
-        return (u * s) @ vh
+        return (u[:, :rank] * s[:rank]) @ vh[:rank]
 
 
 class Activation:
