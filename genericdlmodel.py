@@ -736,6 +736,7 @@ class Updater():
             matrix of rank rank closest to mat
         '''
         u, s, vh = np.linalg.svd(mat)
+        print(s, np.linalg.matrix_rank(mat))
         return (u[:, :rank] * s[:rank]) @ vh[:rank]
 
 
