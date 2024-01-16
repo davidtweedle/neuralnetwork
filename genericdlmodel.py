@@ -699,7 +699,7 @@ class Updater():
         '''
         return mat
 
-    def _rank_one_update(self, mat, num_iter=20):
+    def _rank_one_update(self, mat, rng, num_iter=20):
         """
         Calculate a rank one approximation to as follows
         v, w <-- Aw/||Aw||, A^Tv / ||A^Tv|| and repeat >=num_iter times
@@ -716,7 +716,7 @@ class Updater():
         sigma * v w^T : (n,k) ndarray
             a rank one approximation to mat
         """
-        v = self.rng.random(mat.shape[0], 1)
+        v = rng.random(mat.shape[0], 1)
         w = mat.T @ v
         for _ in range(num_iter):
             v, w = mat @ w, mat.T @ v
