@@ -163,7 +163,7 @@ class Model:
         for layer in reversed(self.layers[:-1]):
             delta = layer.propogate(rate=self.learning_rate, delta=delta)
 
-    def update_all_layers(self, input, batch_labels, validation=False):
+    def update_all_layers(self, x_batch, batch_labels, validation=False):
         """
         calculate the objective function value for input
         This is a forward pass through all the layers
@@ -172,7 +172,7 @@ class Model:
 
         Parameters
         ----------
-        input : (m,n) ndarray
+        x_batch : (m,n) ndarray
             m rows of n independent variables
         batch_labels : (m, n') ndarray
             m rows of n' dependent variables
@@ -182,7 +182,7 @@ class Model:
             any ``neurons''.
         """
         final_layer = self.layers[-1]
-        x = input
+        x = x_batch
         for layer in self.layers[:-1]:
             layer.update(x, validation=validation)
             x = layer.evaluate()
@@ -236,17 +236,17 @@ class Model:
                 start = i * self.batch_size
                 end = min((i + 1) * self.batch_size, self.num_training_samples)
                 batch_labels = self.training_data_y[start:end]
-                input = self.training_data_X[start:end]
-                self.update_all_layers(input, batch_labels)
+                train_X = self.training_data_X[start:end]
+                self.update_all_layers(train_X, batch_labels)
                 train_loss += self.layers[-1].get_loss()
                 num_acc_pred += self.layers[-1].get_num_acc_pred()
                 self.propogate_all_layers()
 
             self.training_loss.append(train_loss / self.num_training_samples)
             self.training_acc.append(num_acc_pred / self.num_training_samples)
-            input = self.val_data_X
+            val_X = self.val_data_X
             batch_labels = self.val_data_y
-            self.update_all_layers(input, batch_labels)s
+            self.update_all_layers(val_X, batch_labels)
             self.val_loss.append(
                 self.layers[-1].get_loss() / self.num_val_samples
             )
@@ -304,6 +304,7 @@ class Layer:
         self.layer_val = None
         self.differential = None
         self.batch_size = None
+        self.x_batch = None
         self.updater = Updater(rule=update_rule,
                                **update_args
                                )
@@ -337,7 +338,7 @@ class Layer:
         self.dropout_weights = self.rng.choice(
             a=[0, 1],
             size=(self.batch_size, self.shape[-1]),
-            p=[1 - self.dropout, self.dropout],
+            p=[self.dropout, 1 - self.dropout],
         )
 
     def update(self, x, validation=False):
@@ -357,8 +358,8 @@ class Layer:
             if true then do not update the gradient and do not use dropout
         """
         self.batch_size = len(x)
-        self.input = x
-        y = self.input @ self.weights + self.bias
+        self.x_batch = x
+        y = self.x_batch @ self.weights + self.bias
         if not validation:  # apply dropout
             self.reset_dropout_weights()
             y /= (1.0 - self.dropout)
@@ -409,10 +410,10 @@ class Layer:
 
         """
         new_delta = np.multiply(delta, self.differential.T)
+        low_rk_grad = self.updater.update(np.dot(self.x_batch.T, new_delta))
         res = new_delta @ self.weights.T
-        print(np.linalg.matrix_rank(np.dot(self.input.T, new_delta)))
         self.weights -= (
-            (rate / self.batch_size) *self.updater.update(np.dot(self.input.T, new_delta))
+            (rate / self.batch_size) * low_rk_grad
         )
         self.bias -= rate * np.mean(new_delta, axis=0)
         return res
@@ -453,7 +454,7 @@ class FinalLayer(Layer):
         self.obj_func = obj_func
         self.loss_val = 0.0
         self.num_acc_pred = 0.0
-        self.input = None
+        self.x_batch = None
 
     def get_loss(self):
         """
@@ -499,13 +500,12 @@ class FinalLayer(Layer):
             if True then do not update the gradient
             if False, then update the gradient as usual
         """
-        self.input = x
+        self.x_batch = x
         self.batch_size = len(x)
-        res = self.input @ self.weights + self.bias
+        res = self.x_batch @ self.weights + self.bias
         self.layer_val = self.activation.evaluate(res)
         if not validation:
             self.differential = self.obj_func.differential(res, y_hat)
-            print('updated differential')
         self.loss_val = self.obj_func.evaluate(res, y_hat)
         self.num_acc_pred = 1.0 * np.sum(
             np.argmax(self.layer_val, axis=-1) == np.argmax(y_hat, axis=-1)
@@ -526,10 +526,9 @@ class FinalLayer(Layer):
             the gradient of the current layer
         """
         res = self.differential @ self.weights.T
-        print(np.linalg.matrix_rank(np.dot(self.input.T, self.differential)))
+        low_rk_grad = self.updater.update(np.dot(self.x_batch.T, self.differential))
         self.weights -= (
-            (rate / self.batch_size)
-            * self.updater.update(np.dot(self.input.T, self.differential))
+            (rate / self.batch_size) * low_rk_grad
         )
         self.bias -= rate * np.mean(self.differential, axis=0)
         return res
@@ -865,3 +864,82 @@ class Activation:
             derivative of relu at y
         """
         return np.greater_equal(y, 0).astype(np.float64)
+
+
+def one_hot_encoding(labels, dim=10):
+    one_hot_labels = labels[..., None] == np.arange(dim)[None]
+    return one_hot_labels.astype(np.float64)
+
+
+def test():
+    import os
+    import requests
+    data_dir = "./data"
+    os.makedirs(data_dir, exist_ok=True)
+
+    request_opts = {"params": {"raw": "true"}}
+
+    base_url = "https://storage.googleapis.com/tensorflow/tf-keras-datasets/"
+    fname = "mnist.npz"
+    fpath = os.path.join(data_dir, fname)
+    if not os.path.exists(fpath):
+        print("Downloading file: " + fname)
+        resp = requests.get(base_url + fname, stream=True, **request_opts)
+        resp.raise_for_status()
+        with open(fpath, "wb") as fh:
+            for chunk in resp.iter_content(chunk_size=128):
+                fh.write(chunk)
+    data_file = np.load(fpath)
+    x_train = data_file.get("x_train")
+    x_test = data_file.get("x_test")
+    y_train = data_file.get("y_train")
+    y_test = data_file.get("y_test")
+    data_file.close()
+    x_train = x_train.reshape(len(x_train), 28 * 28)
+    x_test = x_test.reshape(len(x_test), 28 * 28)
+    sample_size = int(len(x_train))
+    test_split = 5 * sample_size // 6
+    seed = 1234
+    rng = np.random.default_rng(seed=seed)
+    index = rng.choice(len(x_train), sample_size)
+    train_sample_X = x_train[index[:test_split]]
+    val_sample_X = x_train[index[test_split:]]
+    train_sample_y = y_train[index[:test_split]]
+    val_sample_y = y_train[index[test_split:]]
+    train_sample_X = train_sample_X * 1. / 255
+    val_sample_X = val_sample_X * 1. / 255
+    test_sample_X = x_test * 1. / 255
+    train_sample_labels = one_hot_encoding(train_sample_y)
+    val_sample_labels = one_hot_encoding(val_sample_y)
+    test_sample_labels = one_hot_encoding(y_test)
+    learning_rate = 0.1
+    epochs = 10
+    pixels_per_image = 28 * 28
+    num_labels = 10
+    batch_size = 100
+    dropout = 0
+    hidden_layer_sizes = [200, 50]
+    update_rule = "SVD"
+    update_args = {'rank':3}
+    model2 = Model(rng=rng,
+                   training_data_X=train_sample_X,
+                   training_data_y=train_sample_labels,
+                   val_data_X=val_sample_X,
+                   val_data_y=val_sample_labels,
+                   objective_function="categoricalcrossentropy",
+                   learning_rate=learning_rate,
+                   epochs=epochs,
+                   batch_size=batch_size,
+                   )
+    for output_size in hidden_layer_sizes:
+        model2.add_layer(output_size=output_size,
+                         func_name="relu",
+                         dropout=dropout,
+                         update_rule=update_rule,
+                         update_args=update_args,
+                         )
+    model2.add_final_layer(update_rule=update_rule, update_args=update_args)
+    model2.run()
+
+if __name__ == '__main__':
+    test()
