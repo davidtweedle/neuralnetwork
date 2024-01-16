@@ -6,3 +6,4 @@ tags.lock
 .venv/
 *.egg-info/
 .virtual_documents/
+data/
