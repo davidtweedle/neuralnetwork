@@ -1,5 +1,6 @@
 import numpy as np
 from torch._lowrank import svd_lowrank
+from torch import from_numpy
 
 
 class Model:
@@ -749,7 +750,7 @@ class Updater():
         return (u[:, :rank] * s[:rank]) @ vh[:rank]
 
     def _svd_lowrank(self, mat, rank=3, q=6, niter=2):
-        mat = torch.from_numpy(mat)
+        mat = from_numpy(mat)
         u, s, v = svd_lowrank(A=mat, q=q, niter=niter, M=None)
         u, s, v = u.numpy(), s.numpy(), v.numpy()
         return (u[:, :rank] * s[:rank]) @ v[:, :rank].T
