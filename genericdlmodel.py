@@ -1,4 +1,5 @@
 import numpy as np
+from torch._lowrank import svd_lowrank
 
 
 class Model:
@@ -649,7 +650,7 @@ class Updater():
 
         Params
         ------
-        rule : {'identity', 'rank one update', 'SVD'}
+        rule : {'identity', 'rank one update', 'SVD', 'svd_lowrank'}
             rule to update the weights
         kwargs : dict
             keyword arguments to pass to the updater
@@ -684,6 +685,8 @@ class Updater():
             return self._rank_one_update
         elif self.rule == 'SVD':
             return self._SVD
+        elif self.rule == 'svd_lowrank':
+            return self._svd_lowrank
 
     def _identity(self, mat):
         '''
@@ -744,6 +747,10 @@ class Updater():
         '''
         u, s, vh = np.linalg.svd(mat)
         return (u[:, :rank] * s[:rank]) @ vh[:rank]
+
+    def _svd_lowrank(self, mat, rank=3, q=6, niter=2):
+        u, s, v = svd_lowrank(A=mat, q=q, niter=niter, M=None)
+        return (u[:, :rank] * s[:rank]) @ v[:, :rank].T
 
 
 class Activation:
