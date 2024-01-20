@@ -263,7 +263,7 @@ class Model:
                 val_loss=self.val_loss[-1],
                 val_acc=self.val_acc[-1],
             )
-            if self.training_loss[-1] > .95:
+            if self.training_acc[-1] > .95:
                 break
             epoch += 1
 
