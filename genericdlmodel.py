@@ -217,7 +217,7 @@ class Model:
             )
         )
 
-    def run(self, all_weights=None):
+    def run(self, all_weights=None, stopping_rule='epoch'):
         """
         Run the model.
 
@@ -231,7 +231,7 @@ class Model:
         self.training_acc = []
         self.val_loss = []
         self.val_acc = []
-        for j in range(self.epochs):
+        while true:
             train_loss = 0.0
             num_acc_pred = 0.0
             for i in range(self.num_batches):
@@ -256,12 +256,14 @@ class Model:
                 self.layers[-1].get_num_acc_pred() / self.num_val_samples
             )
             self.print_results(
-                epoch=j,
+                epoch=epoch,
                 train_loss=self.training_loss[-1],
                 train_acc=self.training_acc[-1],
                 val_loss=self.val_loss[-1],
                 val_acc=self.val_acc[-1],
             )
+            if self.training_loss[-1] > .95:
+                break
 
 
 class Layer:
