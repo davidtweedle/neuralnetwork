@@ -231,6 +231,7 @@ class Model:
         self.training_acc = []
         self.val_loss = []
         self.val_acc = []
+        epoch = 0
         while True:
             train_loss = 0.0
             num_acc_pred = 0.0
@@ -264,6 +265,7 @@ class Model:
             )
             if self.training_loss[-1] > .95:
                 break
+            epoch += 1
 
 
 class Layer:
