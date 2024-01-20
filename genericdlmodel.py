@@ -231,7 +231,7 @@ class Model:
         self.training_acc = []
         self.val_loss = []
         self.val_acc = []
-        while true:
+        while True:
             train_loss = 0.0
             num_acc_pred = 0.0
             for i in range(self.num_batches):
