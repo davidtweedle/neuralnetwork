@@ -267,8 +267,8 @@ class Model:
                 break
             epoch += 1
             idx = self.rng.shuffle(np.arange(self.num_training_samples))
-            self.training_data_X = self.training_data_X[idx]
-            self.training_data_y = self.training_data_y[idx]
+            self.training_data_X = self.training_data_X[idx, :]
+            self.training_data_y = self.training_data_y[idx, :]
 
 
 class Layer:
