@@ -267,7 +267,7 @@ class Model:
                 break
             epoch += 1
             idx = np.arange(self.num_training_samples)
-            np.rng.shuffle(idx)
+            self.rng.shuffle(idx)
             self.training_data_X = self.training_data_X[idx]
             self.training_data_y = self.training_data_y[idx]
 
