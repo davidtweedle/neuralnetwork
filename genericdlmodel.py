@@ -266,6 +266,9 @@ class Model:
             if self.training_acc[-1] > .95 or epoch > 200:
                 break
             epoch += 1
+            idx = rng.shuffle(np.arange(self.num_training_samples))
+            self.training_data_X = self.training_data_X[idx]
+            self.training_data_y = self.training_data_y[idx]
 
 
 class Layer:
