@@ -16,8 +16,7 @@ class Model:
         val_data_X,
         val_data_y,
         objective_function="categoricalcrossentropy",
-        learning_rate=0.001,
-        epochs=20,
+        learning_rate=0.1,
         batch_size=200,
         eps=1e-5,
     ):
@@ -40,8 +39,6 @@ class Model:
             the name of the objective function
         learning_rate : float
             learning rate of the model
-        epochs : int
-            number of epochs to run
         batch_size : int
             size to sample from training data
         eps : float
@@ -50,7 +47,6 @@ class Model:
         self.eps = eps
         self.layers = []
         self.objective = ObjFunc(self.eps, objective_function)
-        self.epochs = epochs
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.rng = rng
@@ -217,14 +213,21 @@ class Model:
             )
         )
 
-    def run(self, all_weights=None, stopping_rule='epoch'):
+    def run(self, all_weights=None, stopping_rule='epoch', epochs=20, acc=None):
         """
         Run the model.
 
         Parameters
         ----------
-        weights : array
+        all_weights : array
             either None or initial weights for each layer of the model
+        stopping_rule : {'epoch', 'acc'}
+            run for a set number of epochs if 'epoch'
+            run until training accuracy is at least acc if 'acc'
+        epochs : int
+            number of epochs to run for if stopping_rule == 'epoch'
+        acc : float
+            Stop when training accuracy >= acc if stopping_rule == 'acc'
         """
         self.init_weights(all_weights=all_weights)
         self.training_loss = []
@@ -263,7 +266,9 @@ class Model:
                 val_loss=self.val_loss[-1],
                 val_acc=self.val_acc[-1],
             )
-            if self.training_acc[-1] > .95 or epoch > 200:
+            if stopping_rule == 'acc' and self.training_acc[-1] > acc or epoch >= 199:
+                break
+            elif stopping_rule == 'epoch' and epoch >= epochs:
                 break
             epoch += 1
             idx = np.arange(self.num_training_samples)
@@ -536,7 +541,8 @@ class FinalLayer(Layer):
             the gradient of the current layer
         """
         res = self.differential @ self.weights.T
-        low_rk_grad = self.updater.update(np.dot(self.x_batch.T, self.differential))
+        low_rk_grad = self.updater.update(
+            np.dot(self.x_batch.T, self.differential))
         self.weights -= (
             (rate / self.batch_size) * low_rk_grad
         )
@@ -930,15 +936,16 @@ def test():
     train_sample_labels = one_hot_encoding(train_sample_y)
     val_sample_labels = one_hot_encoding(val_sample_y)
     test_sample_labels = one_hot_encoding(y_test)
-    learning_rate = 0.1
-    epochs = 10
+    learning_rate = 0.5
+    acc = 0.99
+    stopping_rule = 'acc'
     pixels_per_image = 28 * 28
     num_labels = 10
-    batch_size = 100
+    batch_size = 200
     dropout = 0
     hidden_layer_sizes = [200, 50]
-    update_rule = "SVD"
-    update_args = {'rank':3}
+    update_rule = "svd_lowrank"
+    update_args = {'rank': 8, 'q': 8, 'niter': 2}
     model2 = Model(rng=rng,
                    training_data_X=train_sample_X,
                    training_data_y=train_sample_labels,
@@ -946,7 +953,6 @@ def test():
                    val_data_y=val_sample_labels,
                    objective_function="categoricalcrossentropy",
                    learning_rate=learning_rate,
-                   epochs=epochs,
                    batch_size=batch_size,
                    )
     for output_size in hidden_layer_sizes:
@@ -957,7 +963,8 @@ def test():
                          update_args=update_args,
                          )
     model2.add_final_layer(update_rule=update_rule, update_args=update_args)
-    model2.run()
+    model2.run(all_weights=None, stopping_rule=stopping_rule, epochs=None, acc=acc)
+
 
 if __name__ == '__main__':
     test()
