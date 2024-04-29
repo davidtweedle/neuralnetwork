@@ -651,7 +651,7 @@ class ObjFunc:
         -log(y_i) such that y_hat_i == 1
 
         """
-        return -np.sum(np.log(y+self.eps, where=y_hat == 1))
+        return -np.sum(np.log(y + self.eps, where=y_hat > 0.5))
 
 
 class Updater():
