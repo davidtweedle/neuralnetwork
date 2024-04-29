@@ -521,7 +521,7 @@ class FinalLayer(Layer):
         self.layer_val = self.activation.evaluate(res)
         if not validation:
             self.differential = self.obj_func.differential(res, y_hat)
-        self.loss_val = self.obj_func.evaluate(res, y_hat)
+        self.loss_val = self.obj_func.evaluate(self.layer_val, y_hat)
         self.num_acc_pred = 1.0 * np.sum(
             np.argmax(self.layer_val, axis=-1) == np.argmax(y_hat, axis=-1)
         )
