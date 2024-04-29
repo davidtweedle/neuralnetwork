@@ -857,8 +857,8 @@ class Activation:
         """
         y = y - np.max(y, axis=-1)[:, None]
         res = np.exp(y)
-        print(res.shape, np.sum(res,axis=-1).shape)
-        return np.divide(res,np.sum(res, axis=-1))
+        print(res.shape, np.sum(res,axis=-1)[:,None].shape)
+        return np.divide(res,np.sum(res, axis=-1)[:,None])
 
     def _d_softmax(self, y):
         """
