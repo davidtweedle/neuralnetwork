@@ -252,7 +252,7 @@ class Model:
             self.training_acc.append(num_acc_pred / self.num_training_samples)
             val_X = self.val_data_X
             batch_labels = self.val_data_y
-            self.update_all_layers(val_X, batch_labels)
+            self.update_all_layers(val_X, batch_labels, validation=True)
             self.val_loss.append(
                 self.layers[-1].get_loss() / self.num_val_samples
             )
@@ -855,7 +855,7 @@ class Activation:
         exp(y)/ sum(exp(y_i)) : (m,k) ndarray
             softmax of y
         """
-        y = y - np.max(y, axis=-1)[:, None]
+        y = y #- np.max(y, axis=-1)[:, None]
         res = np.exp(y)
         return np.divide(res,np.sum(res, axis=-1)[:,None])
 
