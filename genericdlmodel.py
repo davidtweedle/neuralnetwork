@@ -524,6 +524,7 @@ class FinalLayer(Layer):
         self.loss_val = self.obj_func.evaluate(self.layer_val, y_hat)
         if self.loss_val < 0:
             print("ERROR")
+            print(self.layer_val, y_hat)
             raise Exception
         self.num_acc_pred = 1.0 * np.sum(
             np.argmax(self.layer_val, axis=-1) == np.argmax(y_hat, axis=-1)
@@ -654,7 +655,11 @@ class ObjFunc:
         -log(y_i) such that y_hat_i == 1
 
         """
-        return -np.sum(np.log(y, where=np.logical_and(y > self.eps,y_hat > 0.5)))
+        res = -np.sum(np.log(y, where=np.logical_and(y > self.eps,y_hat > 0.5)))
+        if res < 0:
+            print(y, y_hat)
+            raise Exception
+        return res
 
 
 class Updater():
