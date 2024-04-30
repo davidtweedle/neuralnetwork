@@ -659,11 +659,12 @@ class ObjFunc:
         -log(y_i) such that y_hat_i == 1
 
         """
-        res_log = np.log(y, where=np.logical_and(y > self.eps,y_hat > 0.5))
+        res_and = np.logical_and(y > self.eps, y_hat > 0.5)
+        res_log = np.log(y, where=res_and)
         res = -np.sum(res_log)
         if res < 0:
             print(y, y_hat)
-            print(res_log,res)
+            print(res_and,res_log,res)
             print(-np.sum(np.log(y, where=np.logical_and(y > self.eps, y_hat > 0.5))))
             raise Exception
         return res
