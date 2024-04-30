@@ -524,6 +524,7 @@ class FinalLayer(Layer):
         self.loss_val = self.obj_func.evaluate(self.layer_val, y_hat)
         if self.loss_val < 0:
             print("ERROR")
+            raise Exception
         self.num_acc_pred = 1.0 * np.sum(
             np.argmax(self.layer_val, axis=-1) == np.argmax(y_hat, axis=-1)
         )
