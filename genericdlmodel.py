@@ -522,10 +522,6 @@ class FinalLayer(Layer):
         if not validation:
             self.differential = self.obj_func.differential(self.layer_val, y_hat)
         self.loss_val = self.obj_func.evaluate(self.layer_val, y_hat)
-        if self.loss_val < 0:
-            print("ERROR")
-            print(self.layer_val, y_hat)
-            raise Exception
         self.num_acc_pred = 1.0 * np.sum(
             np.argmax(self.layer_val, axis=-1) == np.argmax(y_hat, axis=-1)
         )
@@ -592,11 +588,7 @@ class ObjFunc:
             the value of the objective function at y
         """
         if self.name == "categoricalcrossentropy":
-            res = self._crossentropy(y, y_hat)
-            if res < 0:
-                print(y, y_hat)
-                raise Exception
-            return res
+            return self._crossentropy(y, y_hat)
         elif self.name == "RSS":
             return self._RSS(y, y_hat)
 
@@ -659,14 +651,8 @@ class ObjFunc:
         -log(y_i) such that y_hat_i == 1
 
         """
-        res_and = np.logical_and(y > self.eps, y_hat > 0.5)
-        res_log = np.log(y, where=res_and)
-        res = -np.sum(res_log)
-        if res < 0:
-            print(y, y_hat)
-            print(res_and,res_log,res)
-            print(-np.sum(np.log(y, where=np.logical_and(y > self.eps, y_hat > 0.5))))
-            raise Exception
+        select = y_hat == 1. 
+        res = -np.sum(np.log(y[select]))
         return res
 
 
