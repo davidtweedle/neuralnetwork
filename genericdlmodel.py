@@ -662,6 +662,8 @@ class ObjFunc:
         res = -np.sum(np.log(y, where=np.logical_and(y > self.eps,y_hat > 0.5)))
         if res < 0:
             print(y, y_hat)
+            print(res)
+            print(-np.sum(np.log(y, where=np.logical_and(y > self.eps, y_hat > 0.5))))
             raise Exception
         return res
 
