@@ -592,7 +592,11 @@ class ObjFunc:
             the value of the objective function at y
         """
         if self.name == "categoricalcrossentropy":
-            return self._crossentropy(y, y_hat)
+            res = self._crossentropy(y, y_hat)
+            if res < 0:
+                print(y, y_hat)
+                raise Exception
+            return res
         elif self.name == "RSS":
             return self._RSS(y, y_hat)
 
