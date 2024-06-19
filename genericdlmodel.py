@@ -691,7 +691,7 @@ class Updater():
         updater = self._get_updater()
         try:
             return updater(mat, **self.kwargs)
-        except LinAlgError as E:
+        except np.linalg.LinAlgError as E:
             return mat
 
     def _get_updater(self):
