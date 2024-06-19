@@ -2,6 +2,9 @@ import numpy as np
 from torch._lowrank import svd_lowrank
 from torch import from_numpy
 
+import tensorly as tl
+
+tl.set_backend("numpy")
 
 class Model:
     """
@@ -768,11 +771,9 @@ class Updater():
         u, s, vh = np.linalg.svd(mat)
         return (u[:, :rank] * s[:rank]) @ vh[:rank]
 
-    def _svd_lowrank(self, mat, rank=3, q=6, niter=2):
-        mat = from_numpy(mat)
-        u, s, v = svd_lowrank(A=mat, q=q, niter=niter, M=None)
-        u, s, v = u.numpy(), s.numpy(), v.numpy()
-        return (u[:, :rank] * s[:rank]) @ v[:, :rank].T
+    def _svd_lowrank(self, mat, **kwargs):
+        u, s, vh = tl.tenalg.svd_interface(mat, **kwargs)
+        return (u * s) @ vh
 
 
 class Activation:
